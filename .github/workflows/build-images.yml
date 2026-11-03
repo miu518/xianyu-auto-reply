@@ -1,0 +1,66 @@
+name: Build and push Docker images
+
+# 构建 4 个服务镜像并推送到 GHCR，供 instabox 部署使用
+# 镜像名与官方 compose 的 IMAGE_REGISTRY 变量对齐：
+#   ghcr.io/miu518/xianyu-backend-web:latest
+#   ghcr.io/miu518/xianyu-websocket:latest
+#   ghcr.io/miu518/xianyu-scheduler:latest
+#   ghcr.io/miu518/xianyu-frontend:latest
+# 在 instabox 的 .env 里设置 IMAGE_REGISTRY=ghcr.io/miu518 即可切换
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend-web/**'
+      - 'websocket/**'
+      - 'scheduler/**'
+      - 'frontend/**'
+      - 'common/**'
+      - 'launcher/**'
+      - '.github/workflows/build-images.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: miu518
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend-web
+            dockerfile: backend-web/Dockerfile
+          - service: websocket
+            dockerfile: websocket/Dockerfile
+          - service: scheduler
+            dockerfile: scheduler/Dockerfile
+          - service: frontend
+            dockerfile: docker/frontend/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/xianyu-${{ matrix.service }}:latest
